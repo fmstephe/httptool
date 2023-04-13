@@ -14,33 +14,53 @@ func main() {
 	bs, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		log.Printf("error reading stdin %s", err)
+		return
 	}
 	lines := strings.Split(string(bs), "\n")
 
 	r, lines, err := processRequest(lines)
 	if err != nil {
 		log.Printf("error reading stdin %s", err)
+		return
 	}
 
 	h, lines, err := processHeaders(lines)
 	if err != nil {
 		log.Printf("error reading stdin %s", err)
+		return
 	}
 	r.Header = h
 
 	b, _, err := processBody(lines)
-	r.Body = b
+	r.Body = io.NopCloser(bytes.NewBuffer(b))
+
+	fmt.Printf("%s %s %s\n\n", r.Method, r.URL, r.Proto)
+	fmt.Printf("Request Headers:\n")
+	for header, value := range r.Header {
+		fmt.Printf("%s: %v\n", header, value)
+	}
+	fmt.Printf("\n\n")
+	fmt.Printf("Request Body %s\n", string(b))
+	fmt.Printf("\n")
 
 	resp, err := http.DefaultClient.Do(r)
 	if err != nil {
 		log.Printf("error reading stdin %s", err)
+		return
 	}
+
+	fmt.Printf("Headers: \n")
+	for header, value := range resp.Header {
+		fmt.Printf("%s: %v\n", header, value)
+	}
+	fmt.Printf("\n")
+
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("error reading stdin %s", err)
 	}
 
-	fmt.Printf("%s", respBody)
+	fmt.Printf("Status: %s\n\n %s", resp.Status, respBody)
 }
 
 func processRequest(lines []string) (*http.Request, []string, error) {
@@ -85,12 +105,12 @@ func processHeaders(lines []string) (http.Header, []string, error) {
 		if len(parts) != 2 {
 			return nil, nil, fmt.Errorf("malformed header line %v", parts)
 		}
-		headers.Add(parts[0], parts[1])
+		headers.Add(strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]))
 	}
 	return headers, []string{}, nil
 }
 
-func processBody(lines []string) (io.ReadCloser, []string, error) {
+func processBody(lines []string) ([]byte, []string, error) {
 	buf := &bytes.Buffer{}
 	for i, line := range lines {
 		if _, err := buf.WriteString(line); err != nil {
@@ -102,5 +122,5 @@ func processBody(lines []string) (io.ReadCloser, []string, error) {
 			}
 		}
 	}
-	return io.NopCloser(buf), []string{}, nil
+	return buf.Bytes(), []string{}, nil
 }
